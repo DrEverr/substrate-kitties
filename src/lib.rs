@@ -18,20 +18,59 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 	}
 
+	#[derive(Encode, Decode, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Kitty<T: Config> {
+		pub dna: [u8; 32],
+		pub owner: T::AccountId,
+	}
+
+	#[pallet::storage]
+	pub(super) type CountForKitties<T: Config> = StorageValue<Value = u32, QueryKind = ValueQuery>;
+
+	#[pallet::storage]
+	pub(super) type Kitties<T: Config> = StorageMap<Key = [u8; 32], Value = Kitty<T>>;
+
+	#[pallet::storage]
+	pub(super) type KittiesOwned<T: Config> = StorageMap<
+		Key = T::AccountId,
+		Value = BoundedVec<[u8; 32], ConstU32<100>>,
+		QueryKind = ValueQuery,
+	>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		Created { owner: T::AccountId },
+		Transferred { from: T::AccountId, to: T::AccountId, kitty: [u8; 32] },
 	}
 
 	#[pallet::error]
-	pub enum Error<T> {}
+	pub enum Error<T> {
+		DuplicateKitty,
+		TooManyKitties,
+		TooManyKittiesOwned,
+		TransferToSelf,
+		NoKitty,
+		NotOwned,
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		pub fn create_kitty(origin: OriginFor<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			Self::mint(who)?;
+			let dna = Self::gen_dna();
+			Self::mint(who, dna)?;
+			Ok(())
+		}
+
+		pub fn transfer(
+			origin: OriginFor<T>,
+			to: T::AccountId,
+			kitty_id: [u8; 32],
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			Self::do_transfer(who, to, kitty_id)?;
 			Ok(())
 		}
 	}

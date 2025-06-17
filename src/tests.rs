@@ -17,17 +17,15 @@ use frame::deps::frame_support::runtime;
 use frame::deps::sp_io;
 use frame::runtime::prelude::*;
 use frame::testing_prelude::*;
+use frame::traits::Len;
 use frame::traits::fungible::*;
 
 type Balance = u64;
 type Block = frame_system::mocking::MockBlock<TestRuntime>;
 
-// In our "test runtime", we represent a user `AccountId` with a `u64`.
-// This is just a simplification so that we don't need to generate a bunch of proper cryptographic
-// public keys when writing tests. It is just easier to say "user 1 transfers to user 2".
-// We create the constants `ALICE` and `BOB` to make it clear when we are representing users below.
 const ALICE: u64 = 1;
 const BOB: u64 = 2;
+const DEFAULT_KITTY: Kitty<TestRuntime> = Kitty { dna: [0u8; 32], owner: 0 };
 
 #[runtime]
 mod runtime {
@@ -112,4 +110,231 @@ fn system_and_balances_work() {
 		assert_ok!(PalletBalances::mint_into(&ALICE, 100));
 		assert_ok!(PalletBalances::mint_into(&BOB, 100));
 	});
+}
+
+#[test]
+fn create_kitty_checks_signed() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_noop!(PalletKitties::create_kitty(RuntimeOrigin::none()), DispatchError::BadOrigin);
+	});
+}
+
+#[test]
+fn create_kitty_emits_event() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		System::assert_last_event(Event::<TestRuntime>::Created { owner: 1 }.into());
+	})
+}
+
+#[test]
+fn count_for_kitties_created_correctly() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 0);
+		CountForKitties::<TestRuntime>::set(1337u32);
+		CountForKitties::<TestRuntime>::put(1337u32);
+	})
+}
+
+#[test]
+fn mint_increments_count_for_kitty() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 0);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 1);
+	})
+}
+
+#[test]
+fn mint_errors_when_overflow() {
+	new_test_ext().execute_with(|| {
+		CountForKitties::<TestRuntime>::set(u32::MAX);
+		assert_noop!(
+			PalletKitties::create_kitty(RuntimeOrigin::signed(1)),
+			Error::<TestRuntime>::TooManyKitties
+		);
+	})
+}
+
+#[test]
+fn kitties_map_created_correctly() {
+	new_test_ext().execute_with(|| {
+		let zero_key = [0u8; 32];
+		assert!(!Kitties::<TestRuntime>::contains_key(zero_key));
+		Kitties::<TestRuntime>::insert(zero_key, DEFAULT_KITTY);
+		assert!(Kitties::<TestRuntime>::contains_key(zero_key));
+	})
+}
+
+#[test]
+fn create_kitty_adds_to_map() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_eq!(Kitties::<TestRuntime>::iter().count(), 1);
+	})
+}
+
+#[test]
+fn cannot_mint_duplicate_kitty() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::mint(ALICE, [0u8; 32]));
+		assert_noop!(PalletKitties::mint(BOB, [0u8; 32]), Error::<TestRuntime>::DuplicateKitty);
+	})
+}
+
+#[test]
+fn kitty_struct_has_expected_traits() {
+	new_test_ext().execute_with(|| {
+		let kitty = DEFAULT_KITTY;
+		let bytes = kitty.encode();
+		let _decoded_kitty = Kitty::<TestRuntime>::decode(&mut &bytes[..]).unwrap();
+		assert!(Kitty::<TestRuntime>::max_encoded_len() > 0);
+		let _info = Kitty::<TestRuntime>::type_info();
+	})
+}
+
+#[test]
+fn mint_stores_owner_in_kitty() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::mint(1337, [42u8; 32]));
+		let kitty = Kitties::<TestRuntime>::get([42u8; 32]).unwrap();
+		assert_eq!(kitty.owner, 1337);
+		assert_eq!(kitty.dna, [42u8; 32]);
+	})
+}
+
+#[test]
+fn generate_dna_works() {
+	new_test_ext().execute_with(|| {
+		let dna = PalletKitties::gen_dna();
+		assert_eq!(
+			dna,
+			[
+				56, 98, 123, 124, 46, 238, 69, 214, 179, 29, 139, 103, 191, 184, 64, 133, 101, 187,
+				84, 141, 18, 85, 176, 132, 68, 181, 190, 8, 83, 89, 192, 131
+			]
+		);
+	})
+}
+
+#[test]
+fn create_kitty_makes_unique_kitties() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(BOB)));
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 2);
+		assert_eq!(Kitties::<TestRuntime>::iter().count(), 2);
+	})
+}
+
+#[test]
+fn create_kitty_makes_unique_kitties_same_owner() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 2);
+		assert_eq!(Kitties::<TestRuntime>::iter().count(), 2);
+	})
+}
+
+#[test]
+fn create_kitty_adds_to_owned() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(BOB)));
+		assert_eq!(CountForKitties::<TestRuntime>::get(), 2);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(&ALICE).len(), 1);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(&BOB).len(), 1);
+	})
+}
+
+#[test]
+fn kitties_owned_created_correctly() {
+	new_test_ext().execute_with(|| {
+		assert_eq!(KittiesOwned::<TestRuntime>::get(&ALICE).len(), 0);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_eq!(KittiesOwned::<TestRuntime>::get(&ALICE).iter().count(), 2);
+	});
+}
+
+#[test]
+fn create_kitty_too_many_owned_error() {
+	new_test_ext().execute_with(|| {
+		let mut full_vec: BoundedVec<[u8; 32], ConstU32<100>> = BoundedVec::new();
+		for _ in 0..100 {
+			full_vec.try_push([0u8; 32]).unwrap();
+		}
+		KittiesOwned::<TestRuntime>::set(&ALICE, full_vec.into());
+		assert_noop!(
+			PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)),
+			Error::<TestRuntime>::TooManyKittiesOwned
+		);
+	})
+}
+
+#[test]
+fn transfer_kitty() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_ok!(PalletKitties::transfer(RuntimeOrigin::signed(ALICE), BOB, kitty_id));
+		System::assert_last_event(
+			Event::<TestRuntime>::Transferred { from: ALICE, to: BOB, kitty: kitty_id }.into(),
+		);
+	})
+}
+
+#[test]
+fn do_transfer_kitty_transfer_to_self_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_noop!(
+			PalletKitties::do_transfer(ALICE, ALICE, kitty_id),
+			Error::<TestRuntime>::TransferToSelf
+		);
+	})
+}
+
+#[test]
+fn do_transfer_kitty_not_owned_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_noop!(
+			PalletKitties::do_transfer(BOB, ALICE, kitty_id),
+			Error::<TestRuntime>::NotOwned
+		);
+	})
+}
+
+#[test]
+fn do_transfer_kitty_no_kitty_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		assert_noop!(
+			PalletKitties::do_transfer(ALICE, BOB, [1; 32]),
+			Error::<TestRuntime>::NoKitty
+		);
+	})
+}
+
+#[test]
+fn do_transfer_kitty() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_ok!(PalletKitties::do_transfer(ALICE, BOB, kitty_id));
+		System::assert_last_event(
+			Event::<TestRuntime>::Transferred { from: ALICE, to: BOB, kitty: kitty_id }.into(),
+		);
+	})
 }
