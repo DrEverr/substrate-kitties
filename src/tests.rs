@@ -332,9 +332,15 @@ fn do_transfer_kitty() {
 		System::set_block_number(1);
 		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
 		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![kitty_id]);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![]);
 		assert_ok!(PalletKitties::do_transfer(ALICE, BOB, kitty_id));
 		System::assert_last_event(
 			Event::<TestRuntime>::Transferred { from: ALICE, to: BOB, kitty: kitty_id }.into(),
 		);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![]);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![kitty_id]);
+		let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+		assert_eq!(kitty.owner, BOB);
 	})
 }
