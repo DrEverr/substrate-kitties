@@ -54,11 +54,15 @@ impl<T: Config> Pallet<T> {
 	}
 
 	pub fn do_set_price(
-		owner: T::AccountId,
+		caller: T::AccountId,
 		kitty_id: [u8; 32],
-		price: Option<BalanceOf<T>>,
+		new_price: Option<BalanceOf<T>>,
 	) -> DispatchResult {
-		Self::deposit_event(Event::<T>::PriceSet { owner, kitty_id, price });
+		let mut kitty = Kitties::<T>::get(kitty_id).ok_or(Error::<T>::NoKitty)?;
+		ensure!(kitty.owner == caller, Error::<T>::NotOwned);
+		kitty.price = new_price;
+		Kitties::<T>::insert(kitty_id, kitty);
+		Self::deposit_event(Event::<T>::PriceSet { owner: caller, kitty_id, new_price });
 		Ok(())
 	}
 }

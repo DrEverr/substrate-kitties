@@ -50,7 +50,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		Created { owner: T::AccountId },
 		Transferred { from: T::AccountId, to: T::AccountId, kitty: [u8; 32] },
-		PriceSet { owner: T::AccountId, kitty_id: [u8; 32], price: Option<BalanceOf<T>> },
+		PriceSet { owner: T::AccountId, kitty_id: [u8; 32], new_price: Option<BalanceOf<T>> },
 	}
 
 	#[pallet::error]

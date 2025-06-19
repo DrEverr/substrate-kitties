@@ -347,14 +347,55 @@ fn do_transfer_kitty() {
 }
 
 #[test]
-fn do_set_price_emits_event() {
+fn set_price_emits_event() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
 		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
 		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
 		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
 		System::assert_last_event(
-			Event::<TestRuntime>::PriceSet { owner: ALICE, kitty_id, price: Some(10) }.into(),
+			Event::<TestRuntime>::PriceSet { owner: ALICE, kitty_id, new_price: Some(10) }.into(),
 		);
+	})
+}
+
+#[test]
+fn set_price_no_kitty_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_noop!(
+			PalletKitties::set_price(RuntimeOrigin::signed(ALICE), [0u8; 32], Some(10)),
+			Error::<TestRuntime>::NoKitty
+		);
+	})
+}
+
+#[test]
+fn set_price_not_owned_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_noop!(
+			PalletKitties::set_price(RuntimeOrigin::signed(BOB), kitty_id, Some(10)),
+			Error::<TestRuntime>::NotOwned
+		);
+	})
+}
+
+#[test]
+fn set_price() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+		assert_eq!(kitty.price, None);
+		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
+		System::assert_last_event(
+			Event::<TestRuntime>::PriceSet { owner: ALICE, kitty_id, new_price: Some(10) }.into(),
+		);
+		let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+		assert_eq!(kitty.price, Some(10));
 	})
 }
