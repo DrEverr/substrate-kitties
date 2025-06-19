@@ -345,3 +345,16 @@ fn do_transfer_kitty() {
 		assert_eq!(kitty.owner, BOB);
 	})
 }
+
+#[test]
+fn do_set_price_emits_event() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
+		System::assert_last_event(
+			Event::<TestRuntime>::PriceSet { owner: ALICE, kitty_id, price: Some(10) }.into(),
+		);
+	})
+}
