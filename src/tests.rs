@@ -404,10 +404,68 @@ fn set_price() {
 fn buy_kitty_emits_event() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
+		assert_ok!(PalletBalances::mint_into(&BOB, 100));
 		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
 		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
 		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
 		assert_ok!(PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 10));
+		System::assert_last_event(
+			Event::<TestRuntime>::Sold { buyer: BOB, kitty_id, price: 10 }.into(),
+		);
+	})
+}
+
+#[test]
+fn buy_kitty_no_kitty_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_noop!(
+			PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), [0u8; 32], 10),
+			Error::<TestRuntime>::NoKitty
+		);
+	})
+}
+
+#[test]
+fn buy_kitty_not_for_sale_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_noop!(
+			PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 10),
+			Error::<TestRuntime>::NotForSale
+		);
+	})
+}
+
+#[test]
+fn buy_kitty_price_too_low_error() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
+		assert_noop!(
+			PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1),
+			Error::<TestRuntime>::PriceTooLow
+		);
+	})
+}
+
+#[test]
+fn buy_kitty() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		assert_ok!(PalletBalances::mint_into(&BOB, 100));
+		assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+		let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+		assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(10)));
+		assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![kitty_id]);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![]);
+		assert_ok!(PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 15));
+		assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![]);
+		assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![kitty_id]);
 		System::assert_last_event(
 			Event::<TestRuntime>::Sold { buyer: BOB, kitty_id, price: 10 }.into(),
 		);

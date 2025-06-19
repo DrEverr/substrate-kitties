@@ -62,6 +62,8 @@ pub mod pallet {
 		TransferToSelf,
 		NoKitty,
 		NotOwned,
+		NotForSale,
+		PriceTooLow,
 	}
 
 	#[pallet::call]

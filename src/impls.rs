@@ -2,6 +2,8 @@ use super::*;
 use frame::prelude::*;
 use frame::traits::BlakeTwo256;
 use frame::traits::Hash;
+use frame::traits::fungible::Mutate;
+use frame::traits::tokens::Preservation;
 
 impl<T: Config> Pallet<T> {
 	pub fn gen_dna() -> [u8; 32] {
@@ -71,7 +73,14 @@ impl<T: Config> Pallet<T> {
 		kitty_id: [u8; 32],
 		max_price: BalanceOf<T>,
 	) -> DispatchResult {
-		Self::deposit_event(Event::<T>::Sold { buyer, kitty_id, price: max_price });
+		let kitty = &Kitties::<T>::get(kitty_id).ok_or(Error::<T>::NoKitty)?;
+		let real_price = kitty.price.ok_or(Error::<T>::NotForSale)?;
+		ensure!(max_price >= real_price, Error::<T>::PriceTooLow);
+
+		T::NativeBalance::transfer(&buyer, &kitty.owner, real_price, Preservation::Preserve)?;
+		Self::do_transfer(kitty.owner.clone(), buyer.clone(), kitty_id)?;
+
+		Self::deposit_event(Event::<T>::Sold { buyer, kitty_id, price: real_price });
 		Ok(())
 	}
 }
