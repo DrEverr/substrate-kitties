@@ -17,6 +17,7 @@ for this amazing tutorial.
 - [Blockchain](https://youtu.be/8UvdfFGYFiE)
 - [Substrate](https://youtu.be/-ttmm8gYS04)
 - [FRAME](https://youtu.be/ghMloMzEEsA)
+- [SCALE Codec](https://youtu.be/6N6BopyYKq4)
 
 ### Documentation
 
